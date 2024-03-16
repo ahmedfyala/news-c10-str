@@ -4,6 +4,8 @@ import 'package:news_c10_str/screens/news_item.dart';
 import 'package:news_c10_str/screens/source_item.dart';
 import 'package:news_c10_str/shared/network/remote/api_manager.dart';
 
+import '../models/NewsResponse.dart';
+
 class NewsTab extends StatefulWidget {
   List<Sources> sources;
 
@@ -15,6 +17,41 @@ class NewsTab extends StatefulWidget {
 
 class _NewsTabState extends State<NewsTab> {
   int selectedIndex = 0;
+  int page = 1;
+  int pageSize = 20;
+  late ScrollController scrollController;
+  List<Articles> articlesList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    scrollController = ScrollController();
+    scrollController.addListener(
+      () {
+        if (scrollController.position.atEdge) {
+          print("--------------------------AtEdge");
+          if (scrollController.offset != 0 &&
+              scrollController.position.pixels != 0) {
+            setState(() {
+              page++;
+            });
+            loadNews();
+          }
+        }
+      },
+    );
+  }
+
+  Future<void> loadNews() async {
+    var newarticleList = await ApiManager.getNewsData(
+      sourceId: widget.sources[selectedIndex].id ?? "",
+      page: page,
+      pageSize: pageSize,
+    );
+    setState(() {});
+    articlesList.addAll(newarticleList?.articles ?? []);
+    print(newarticleList);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +65,9 @@ class _NewsTabState extends State<NewsTab> {
               onTap: (value) {
                 setState(() {});
                 selectedIndex = value;
+                page = 1;
+                articlesList.clear();
+                loadNews();
               },
               indicatorColor: Colors.transparent,
               tabs: widget.sources
@@ -40,42 +80,37 @@ class _NewsTabState extends State<NewsTab> {
                       ))
                   .toList(),
             )),
-        FutureBuilder(
-          future:
-              ApiManager.getNewsData(widget.sources[selectedIndex].id ?? ""),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(
-                  child: CircularProgressIndicator(
-                color: Colors.green,
-              ));
-            }
-            if (snapshot.hasError) {
-              return Center(child: Text("Something went wrong"));
-            }
-
-            var articlesList = snapshot.data?.articles ?? [];
-            if (articlesList.isEmpty) {
-              return Center(child: Text("No SOurces"));
-            }
-            return Expanded(
-              child: ListView.separated(
-
-                separatorBuilder: (context, index) => SizedBox(
-                  height: 12,
-                ),
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: NewsItem(article: articlesList[index]),
-                  );
-                },
-                itemCount: articlesList.length,
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                page = 1;
+                pageSize = 20;
+              });
+              await loadNews();
+            },
+            child: ListView.separated(
+              controller: scrollController,
+              separatorBuilder: (context, index) => SizedBox(
+                height: 12,
               ),
-            );
-          },
-        )
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: NewsItem(article: articlesList[index]),
+                );
+              },
+              itemCount: articlesList.length,
+            ),
+          ),
+        ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    scrollController.dispose();
   }
 }
